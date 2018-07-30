@@ -45,7 +45,7 @@ class OWFrequentSequence(widget.OWWidget):
         fq_button = gui.appendRadioButton(sampling, "Frequent")
         k_button = gui.appendRadioButton(sampling, "Top-K")
         self.param_box = gui.vBox(self.controlArea, "Parameters")
-        gui.spin(self.param_box, self, 'min_support', 1, 10 ** 6, label='Min. support:')
+        gui.spin(self.param_box, self, 'min_support', 1, 10 ** 2, label='Min. support(%):')
         gui.spin(self.param_box, self, 'k', 1, 10 ** 3, label='K:')
         gui.spin(self.param_box, self, 'min_len', 1, 10**2, label='Min. length:')
         gui.checkBox(self.param_box, self, 'closed', label='Closed patterns')
@@ -61,12 +61,13 @@ class OWFrequentSequence(widget.OWWidget):
         def __init__(self, num):
             super().__init__(str(num))
         def __lt__(self, other):
-            return int(self.text()) < int(other.text())
+            return float(self.text()) < float(other.text())
 
     def find_patterns(self):
         print(self.sampling_type)
         db = self.data
         ps = PrefixSpan(db)
+        n_items = len(db)
         result = None
         opts = {
             "closed": self.closed,
@@ -78,19 +79,27 @@ class OWFrequentSequence(widget.OWWidget):
         if self.sampling_type:
             result = ps.topk(self.k, **opts)
         else:
-            result = ps.frequent(self.min_support, **opts)
-        self.Outputs.object.send(result)
+            print("Support value:", self.min_support)
+            print("Size:", n_items)
+            print("Support:", n_items * self.min_support / 100)
+            result = ps.frequent((self.min_support * n_items / 100.0), **opts)
+        
         self.table.model().clear()
         model = QStandardItemModel(self.table)
+        model.clear()
         for col,label in enumerate(["Support", "Pattern"]):
             item = QStandardItem(label)
             model.setHorizontalHeaderItem(col, item)
+        sequences = []
         for support, pattern in result:
             if len(pattern) < self.min_len:
                 continue
+            support /= n_items
+            sequences.append((support, pattern))
             sitem = self.NumericItem(support)
             pitem = QStandardItem(str(pattern))
             model.appendRow([ sitem, pitem ])
+        self.Outputs.object.send(sequences)
         self.table.setModel(model)
 
     @Inputs.object
